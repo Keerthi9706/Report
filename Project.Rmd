@@ -1,0 +1,569 @@
+---
+title: "Project"
+output: html_document
+date: "2026-04-08"
+---
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+library(yardstick)
+library(rsample)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(ranger)
+library(cluster)
+library(class)
+
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(rsample)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(ranger)
+library(cluster)
+library(class)
+
+```
+
+# 1. Read the crop dataset
+
+```{r}
+crop_data <- read.csv("C:/Users/T00759558/Downloads/Crop_Recommendation.csv")
+
+# Check the structure
+str(crop_data)
+head(crop_data)
+
+# Make sure the response variable is a factor
+crop_data$Crop <- as.factor(crop_data$Crop)
+```
+
+# 2.Keep only the variables needed
+
+```{r}
+crop_data <- crop_data %>%
+  dplyr::select(
+    Nitrogen,
+    Phosphorus,
+    Potassium,
+    Temperature,
+    Humidity,
+    pH_Value,
+    Rainfall,
+    Crop
+  )
+```
+
+# 3. Group the observations using K-means
+
+```{r}
+# K-means uses only numeric predictors, not the crop label
+cluster_data <- crop_data %>%
+  dplyr::select(
+    Nitrogen,
+    Phosphorus,
+    Potassium,
+    Temperature,
+    Humidity,
+    pH_Value,
+    Rainfall
+  )
+
+# Standardize the variables before clustering
+cluster_data_scaled <- scale(cluster_data)
+```
+
+# 4. Create 4 clusters
+
+```{r}
+set.seed(4050)
+
+best_k <- 4
+best_k
+```
+# 5.Fit the final K-means model
+
+
+```{r}
+set.seed(4050)
+km_final <- kmeans(cluster_data_scaled, centers = best_k, nstart = 25)
+
+crop_data$Cluster <- as.factor(km_final$cluster)
+
+# Show how crops are distributed inside clusters
+table(crop_data$Cluster, crop_data$Crop)
+```
+# 6. Visualize the clusters using PCA
+
+
+```{r}
+pca_fit <- prcomp(cluster_data_scaled)
+
+pca_df <- data.frame(
+  PC1 = pca_fit$x[, 1],
+  PC2 = pca_fit$x[, 2],
+  Cluster = crop_data$Cluster,
+  Crop = crop_data$Crop
+)
+
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(alpha = 0.7, size = 2) +
+  labs(
+    title = "K-means clusters of crop-growing conditions",
+    x = "Principal Component 1",
+    y = "Principal Component 2"
+  ) +
+  theme_minimal()
+```
+
+
+# Classification part
+
+
+# 7. Create training and testing data
+
+```{r}
+set.seed(4050)
+
+crop_split <- initial_split(crop_data, prop = 0.80, strata = Cluster)
+
+train_data <- training(crop_split)
+test_data  <- testing(crop_split)
+
+# Use only the original predictors for classification
+train_model <- train_data %>%
+  dplyr::select(
+    Cluster,
+    Nitrogen,
+    Phosphorus,
+    Potassium,
+    Temperature,
+    Humidity,
+    pH_Value,
+    Rainfall
+  )
+
+test_model <- test_data %>%
+  dplyr::select(
+    Cluster,
+    Nitrogen,
+    Phosphorus,
+    Potassium,
+    Temperature,
+    Humidity,
+    pH_Value,
+    Rainfall
+  )
+```
+
+# 8. Set cross-validation control
+
+
+```{r}
+
+
+
+
+set.seed(4050)
+
+cv_ctrl <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 3
+)
+```
+
+# 9. Decision Tree with hyperparameter tuning
+
+```{r}
+tree_grid <- expand.grid(
+  cp = seq(0.0005, 0.02, length.out = 20)
+)
+
+set.seed(4050)
+tree_model <- train(
+  Cluster ~ .,
+  data = train_model,
+  method = "rpart",
+  trControl = cv_ctrl,
+  tuneGrid = tree_grid,
+  metric = "Accuracy"
+)
+
+tree_model
+tree_model$bestTune
+
+ggplot(tree_model) +
+  labs(title = "Decision Tree tuning results")
+
+rpart.plot(tree_model$finalModel)
+```
+
+# 10. Test performance for Decision Tree
+
+```{r}
+tree_pred <- predict(tree_model, newdata = test_model)
+
+tree_cm <- confusionMatrix(
+  data = tree_pred,
+  reference = test_model$Cluster
+)
+
+tree_cm
+```
+
+# 11. Random Forest with hyperparameter tuning
+
+```{r}
+rf_grid <- expand.grid(
+  mtry = 2:7,
+  splitrule = "gini",
+  min.node.size = c(1, 3, 5, 10)
+)
+
+set.seed(4050)
+rf_model <- train(
+  Cluster ~ .,
+  data = train_model,
+  method = "ranger",
+  trControl = cv_ctrl,
+  tuneGrid = rf_grid,
+  metric = "Accuracy",
+  num.trees = 500,
+  importance = "impurity"
+)
+
+rf_model
+rf_model$bestTune
+
+ggplot(rf_model) +
+  labs(title = "Random Forest tuning results")
+
+varImp(rf_model)
+```
+
+
+# Test performance for Random Forest
+
+```{r}
+rf_pred <- predict(rf_model, newdata = test_model)
+
+rf_cm <- confusionMatrix(
+  data = rf_pred,
+  reference = test_model$Cluster
+)
+
+rf_cm
+```
+
+# 13. k-NN classification with hyperparameter tuning
+
+```{r}
+knn_grid <- expand.grid(
+  k = seq(3, 31, by = 2)
+)
+
+set.seed(4050)
+knn_model <- train(
+  Cluster ~ .,
+  data = train_model,
+  method = "knn",
+  trControl = cv_ctrl,
+  tuneGrid = knn_grid,
+  metric = "Accuracy",
+  preProcess = c("center", "scale")
+)
+
+knn_model
+knn_model$bestTune
+
+ggplot(knn_model) +
+  labs(title = "k-NN tuning results")
+```
+
+
+# 14. Test performance for k-NN
+
+
+```{r}
+knn_pred <- predict(knn_model, newdata = test_model)
+
+knn_cm <- confusionMatrix(
+  data = knn_pred,
+  reference = test_model$Cluster
+)
+
+knn_cm
+```
+# 15. Compare the models on the test set
+
+```{r}
+model_results <- data.frame(
+  Model = c("Decision Tree", "Random Forest", "k-NN"),
+  Accuracy = c(
+    as.numeric(tree_cm$overall["Accuracy"]),
+    as.numeric(rf_cm$overall["Accuracy"]),
+    as.numeric(knn_cm$overall["Accuracy"])
+  ),
+  Kappa = c(
+    as.numeric(tree_cm$overall["Kappa"]),
+    as.numeric(rf_cm$overall["Kappa"]),
+    as.numeric(knn_cm$overall["Kappa"])
+  )
+)
+
+model_results <- model_results %>%
+  arrange(desc(Accuracy))
+
+print(model_results)
+
+ggplot(model_results, aes(x = reorder(Model, Accuracy), y = Accuracy)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Test accuracy comparison of the models",
+    x = "Model",
+    y = "Accuracy"
+  ) +
+  theme_minimal()
+```
+
+# 16. Identify the best model
+
+```{r}
+best_model_name <- model_results$Model[1]
+best_model_name
+
+# Show the confusion matrix for the best model
+if (best_model_name == "Decision Tree") {
+  best_cm <- tree_cm
+  best_pred <- tree_pred
+} else if (best_model_name == "Random Forest") {
+  best_cm <- rf_cm
+  best_pred <- rf_pred
+} else {
+  best_cm <- knn_cm
+  best_pred <- knn_pred
+}
+
+best_cm
+```
+
+# 17. Show a few final predictions
+
+```{r}
+final_predictions <- data.frame(
+  Actual_Cluster = test_model$Cluster,
+  Predicted_Cluster = best_pred
+)
+
+# Show the first 50 predictions
+head(final_predictions, 50)
+```
+
+
+
+```{r}
+# Or show 30 random predictions
+set.seed(4050)
+
+final_predictions %>%
+  sample_n(30)
+```
+
+# 19. Create prediction data frames for each model
+
+```{r}
+library(yardstick)
+
+
+tree_results <- data.frame(
+  truth = test_model$Cluster,
+  estimate = tree_pred
+)
+
+rf_results <- data.frame(
+  truth = test_model$Cluster,
+  estimate = rf_pred
+)
+
+knn_results <- data.frame(
+  truth = test_model$Cluster,
+  estimate = knn_pred
+)
+
+tree_results$truth <- as.factor(tree_results$truth)
+tree_results$estimate <- as.factor(tree_results$estimate)
+
+rf_results$truth <- as.factor(rf_results$truth)
+rf_results$estimate <- as.factor(rf_results$estimate)
+
+knn_results$truth <- as.factor(knn_results$truth)
+knn_results$estimate <- as.factor(knn_results$estimate)
+```
+
+# 20. Overall model comparison
+
+
+
+```{r}
+
+tree_metrics <- dplyr::bind_rows(
+  yardstick::accuracy(tree_results, truth = truth, estimate = estimate),
+  yardstick::precision(tree_results, truth = truth, estimate = estimate, estimator = "macro"),
+  yardstick::recall(tree_results, truth = truth, estimate = estimate, estimator = "macro"),
+  yardstick::f_meas(tree_results, truth = truth, estimate = estimate, estimator = "macro")
+) %>%
+  dplyr::mutate(Model = "Decision Tree")
+
+rf_metrics <- dplyr::bind_rows(
+  yardstick::accuracy(rf_results, truth = truth, estimate = estimate),
+  yardstick::precision(rf_results, truth = truth, estimate = estimate, estimator = "macro"),
+  yardstick::recall(rf_results, truth = truth, estimate = estimate, estimator = "macro"),
+  yardstick::f_meas(rf_results, truth = truth, estimate = estimate, estimator = "macro")
+) %>%
+  dplyr::mutate(Model = "Random Forest")
+
+knn_metrics <- dplyr::bind_rows(
+  yardstick::accuracy(knn_results, truth = truth, estimate = estimate),
+  yardstick::precision(knn_results, truth = truth, estimate = estimate, estimator = "macro"),
+  yardstick::recall(knn_results, truth = truth, estimate = estimate, estimator = "macro"),
+  yardstick::f_meas(knn_results, truth = truth, estimate = estimate, estimator = "macro")
+) %>%
+  dplyr::mutate(Model = "k-NN")
+
+all_metrics <- dplyr::bind_rows(tree_metrics, rf_metrics, knn_metrics) %>%
+  dplyr::select(Model, .metric, .estimate)
+
+print(all_metrics)
+
+```
+
+
+```{r}
+library(tidyr)
+
+metrics_table <- all_metrics %>%
+  pivot_wider(names_from = .metric, values_from = .estimate)
+
+print(metrics_table)
+```
+
+
+
+```{r}
+
+confusionMatrix(rf_pred, test_model$Cluster)
+```
+# 21. Plot confusion matrix for the best model
+
+
+```{r}
+# Get predictions from the best model
+if (best_model_name == "Decision Tree") {
+  best_pred <- tree_pred
+} else if (best_model_name == "Random Forest") {
+  best_pred <- rf_pred
+} else {
+  best_pred <- knn_pred
+}
+
+best_results <- data.frame(
+  Actual = test_model$Cluster,
+  Predicted = best_pred
+)
+
+best_results$Actual <- factor(best_results$Actual, levels = c("1", "2", "3", "4"))
+best_results$Predicted <- factor(best_results$Predicted, levels = c("1", "2", "3", "4"))
+
+best_cm_4x4 <- table(best_results$Actual, best_results$Predicted)
+best_cm_4x4
+
+best_cm_plot <- as.data.frame(best_cm_4x4)
+
+colnames(best_cm_plot) <- c("Actual", "Predicted", "Freq")
+
+ggplot(best_cm_plot, aes(x = Predicted, y = Actual, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 5) +
+  labs(
+    title = paste("4 x 4 Confusion Matrix for Best Model:", best_model_name),
+    x = "Predicted Cluster",
+    y = "Actual Cluster"
+  ) +
+  theme_minimal()
+```
+
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+
