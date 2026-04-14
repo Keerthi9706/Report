@@ -1,7 +1,6 @@
 ---
 title: "eda"
 output: html_document
-date: "2026-04-08"
 ---
 
 ```{r}
@@ -27,8 +26,6 @@ names(crop_data)
 ```
 
 # 4. Check missing values
-
-
 
 ```{r}
 colSums(is.na(crop_data))
@@ -109,8 +106,6 @@ ggplot(crop_data, aes(x = Rainfall)) +
 
 
 # 11. Boxplots to check spread and possible outliers
-
-
 ```{r}
 ggplot(crop_data, aes(y = Nitrogen)) +
   geom_boxplot(fill = "orange") +
