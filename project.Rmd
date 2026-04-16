@@ -1,27 +1,42 @@
 ---
 title: "Project"
-author: "keerthi, Sahaya vinish"
+author: " Keerthi, Sahaya vinish"
 date: "2026-04-06"
 output: html_document
 ---
 
 
 ```{r}
-library(dplyr)
-library(ggplot2)
-library(caret)
-library(rsample)
-library(rpart)
-library(rpart.plot)
-library(randomForest)
-library(ranger)
-library(cluster)
-library(class)
+.libPaths()
+
+user_lib <- path.expand("~/R/library")
+if (!dir.exists(user_lib)) {
+  dir.create(user_lib, recursive = TRUE)
+}
+
+.libPaths(c(user_lib, .libPaths()))
+
+required_pkgs <- c(
+  "dplyr", "ggplot2", "caret", "rsample", "rpart", "rpart.plot",
+  "randomForest", "ranger", "cluster", "class", "yardstick", "tidyr"
+)
+
+missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+
+if (length(missing_pkgs) > 0) {
+  install.packages(missing_pkgs, lib = user_lib, repos = "https://cloud.r-project.org/")
+}
+
+invisible(lapply(required_pkgs, library, character.only = TRUE))
+```
+
+```{r}
+
 ```
 
 # 2. Read the crop dataset
 ```{r}
-crop_data <- read.csv("C:/Users/keert/Multivariate Statistics/Report/Crop_Recommendation.csv")
+crop_data <- read.csv("Crop_Recommendation.csv")
 
 # Check the structure
 str(crop_data)
