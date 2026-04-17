@@ -1,6 +1,5 @@
 ---
 title: "Project"
-author: "keerthi, Sahaya vinish"
 date: "2026-04-06"
 output: html_document
 ---
@@ -22,7 +21,7 @@ library(class)
 # 1. Read the crop dataset
 
 ```{r}
-crop_data <- read.csv("C:/Users/keert/Multivariate Statistics/Report/Crop_Recommendation.csv")
+crop_data <- read.csv("Crop_Recommendation.csv")
 
 # Check the structure
 str(crop_data)
