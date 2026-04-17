@@ -1,0 +1,10 @@
+name: crop-dashboard
+title:
+username: cropdash
+account: cropdash
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17166102
+bundleId: 11868835
+url: https://cropdash.shinyapps.io/crop-dashboard/
+version: 1
